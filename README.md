@@ -35,3 +35,10 @@ Broken request (missing field):
 ```bash
 curl -X POST http://localhost:8000/triage -H "Content-Type: application/json" -d '{}'
 ```
+
+## Observations
+
+- Model classifies correctly: "charged twice" → billing, "app crashing" → bug, "dark mode" → feature
+- Confidence is consistently high (0.9-0.95) for clear messages
+- Temperature 0.2 gives consistent answers for same input
+- Prompt file approach keeps instructions separate from code
