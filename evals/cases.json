@@ -1,1 +1,58 @@
-[]
+[
+  {
+    "text": "I was charged twice for my subscription this month",
+    "expected": {
+      "category": "billing",
+      "urgency": "normal"
+    }
+  },
+  {
+    "text": "The app crashes every time I try to open the settings page",
+    "expected": {
+      "category": "bug",
+      "urgency": "high"
+    }
+  },
+  {
+    "text": "Can you add a dark mode feature to the app?",
+    "expected": {
+      "category": "feature",
+      "urgency": "low"
+    }
+  },
+  {
+    "text": "Hello",
+    "expected": {
+      "category": "other",
+      "urgency": "low"
+    }
+  },
+  {
+    "text": "My subscription was renewed but I cancelled it last week. Also the app is slow.",
+    "expected": {
+      "category": "billing",
+      "urgency": "high"
+    }
+  },
+  {
+    "text": "I need help with my account",
+    "expected": {
+      "category": "other",
+      "urgency": "normal"
+    }
+  },
+  {
+    "text": "The export feature returns empty CSV files",
+    "expected": {
+      "category": "bug",
+      "urgency": "normal"
+    }
+  },
+  {
+    "text": "Would be nice if you could integrate with Slack",
+    "expected": {
+      "category": "feature",
+      "urgency": "low"
+    }
+  }
+]
