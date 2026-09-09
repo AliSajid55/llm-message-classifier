@@ -20,7 +20,18 @@ uvicorn src.main:app --reload
 
 - `POST /triage` — Classifies a support message into category, urgency, confidence, and reason.
 
-## Kill Switch
+## Stub Mode
 
-Set `LLM_ENABLED=false` in `.env` to use stub mode (no LLM calls).
+Set `LLM_STUB=1` to skip the LLM and return a hard-coded response.
 
+## Test with curl
+
+Valid request:
+```bash
+curl -X POST http://localhost:8000/triage -H "Content-Type: application/json" -d '{"text": "My invoice is wrong"}'
+```
+
+Broken request (missing field):
+```bash
+curl -X POST http://localhost:8000/triage -H "Content-Type: application/json" -d '{}'
+```
