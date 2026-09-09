@@ -23,3 +23,4 @@ uvicorn src.main:app --reload
 ## Kill Switch
 
 Set `LLM_ENABLED=false` in `.env` to use stub mode (no LLM calls).
+
