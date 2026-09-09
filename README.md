@@ -20,9 +20,17 @@ uvicorn src.main:app --reload
 
 - `POST /triage` — Classifies a support message into category, urgency, confidence, and reason.
 
-## Stub Mode
+## Kill Switch
 
-Set `LLM_STUB=1` to skip the LLM and return a hard-coded response.
+Set `LLM_ENABLED=false` in `.env` to skip the LLM and return a safe fallback (no model calls).
+
+## Retry Logic
+
+Custom retry with exponential backoff: retries on timeouts, 429, and 5xx only. Never retries 400, 401, or 403. Max 2 retries with jitter. SDK default retries disabled (`max_retries=0`).
+
+## Cost Logging
+
+Every call logs to `logs/calls.jsonl`: model, tokens, duration, repair status.
 
 ## Test with curl
 

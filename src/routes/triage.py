@@ -3,7 +3,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
 from src.llm.schema import TriageRequest, TriageResponse
-from src.llm.client import get_client, get_model
+from src.llm.client import get_client, get_model, call_with_retry, log_call
 from src.llm.parse_repair import parse_and_validate, log_quarantine
 
 load_dotenv(override=True)
@@ -20,49 +20,56 @@ def load_prompt(version="v1"):
 
 @router.post("/triage", response_model=TriageResponse)
 async def triage(request: TriageRequest):
-    if os.environ.get("LLM_STUB") == "1":
+    if os.environ.get("LLM_ENABLED") == "false":
         return TriageResponse(
             category="other",
             urgency="normal",
             confidence=0.0,
-            reason="stub mode - no LLM call"
+            reason="service disabled"
         )
 
     system_prompt = load_prompt()
     client = get_client()
     model = get_model()
 
-    completion = client.chat.completions.create(
-        model=model,
-        temperature=0.2,
-        messages=[
+    result, error = call_with_retry(
+        client, model,
+        [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": request.text},
-        ],
+        ]
     )
 
-    raw = completion.choices[0].message.content or ""
-    response, error = parse_and_validate(raw, request.text)
+    if error:
+        raise HTTPException(status_code=502, detail=f"LLM call failed: {error}")
+
+    log_call(model, result["input_tokens"], result["output_tokens"], result["duration_ms"], False)
+
+    response, parse_error = parse_and_validate(result["content"], request.text)
 
     if response is not None:
         return response
 
-    repair_completion = client.chat.completions.create(
-        model=model,
-        temperature=0.2,
-        messages=[
+    repair_result, repair_error = call_with_retry(
+        client, model,
+        [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": request.text},
-            {"role": "assistant", "content": raw},
-            {"role": "user", "content": f"Your previous answer was rejected for this reason: {error}. Return only corrected JSON matching the schema."},
-        ],
+            {"role": "assistant", "content": result["content"]},
+            {"role": "user", "content": f"Your previous answer was rejected for this reason: {parse_error}. Return only corrected JSON matching the schema."},
+        ]
     )
 
-    repair_raw = repair_completion.choices[0].message.content or ""
-    response, repair_error = parse_and_validate(repair_raw, request.text)
+    if repair_error:
+        log_quarantine(result["content"], parse_error or "Unknown error", "v1", request.text)
+        raise HTTPException(status_code=422, detail=f"Model output invalid: {parse_error}")
+
+    log_call(model, repair_result["input_tokens"], repair_result["output_tokens"], repair_result["duration_ms"], True)
+
+    response, repair_parse_error = parse_and_validate(repair_result["content"], request.text)
 
     if response is not None:
         return response
 
-    log_quarantine(repair_raw, repair_error or "Unknown error", "v1", request.text)
-    raise HTTPException(status_code=422, detail=f"Model output invalid: {repair_error}")
+    log_quarantine(repair_result["content"], repair_parse_error or "Unknown error", "v1", request.text)
+    raise HTTPException(status_code=422, detail=f"Model output invalid: {repair_parse_error}")
