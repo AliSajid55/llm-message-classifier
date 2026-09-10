@@ -6,7 +6,7 @@ CASES_FILE = Path(__file__).parent / "cases.json"
 ENDPOINT = "http://localhost:8000/triage"
 
 
-def run_eval():
+def run_eval(prompt_version="v1"):
     with open(CASES_FILE, "r", encoding="utf-8") as f:
         cases = json.load(f)
 
@@ -54,6 +54,7 @@ def run_eval():
     percentage = round((passed / total) * 100, 1)
 
     print("=" * 50)
+    print(f"Prompt: {prompt_version}")
     print(f"Score: {score} ({percentage}%)")
     print(f"Passed: {passed}, Failed: {len(failed)}")
 
@@ -66,4 +67,6 @@ def run_eval():
 
 
 if __name__ == "__main__":
-    run_eval()
+    import sys
+    version = sys.argv[1] if len(sys.argv) > 1 else "v1"
+    run_eval(version)

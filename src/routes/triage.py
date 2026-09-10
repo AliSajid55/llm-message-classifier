@@ -1,7 +1,8 @@
 import os
+import hashlib
 from pathlib import Path
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from src.llm.schema import TriageRequest, TriageResponse
 from src.llm.client import get_client, get_model, call_with_retry, log_call
 from src.llm.parse_repair import parse_and_validate, log_quarantine
@@ -12,6 +13,14 @@ router = APIRouter()
 
 PROMPT_DIR = Path(__file__).parent.parent.parent / "prompts"
 
+cache: dict[str, TriageResponse] = {}
+CACHE_MAX_SIZE = 100
+
+
+def get_cache_key(text: str, prompt_version: str) -> str:
+    raw = f"{text}:{prompt_version}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
 
 def load_prompt(version="v1"):
     prompt_file = PROMPT_DIR / f"triage-{version}.md"
@@ -19,7 +28,7 @@ def load_prompt(version="v1"):
 
 
 @router.post("/triage", response_model=TriageResponse)
-async def triage(request: TriageRequest):
+async def triage(request: TriageRequest, prompt_version: str = Query(default="v1", regex="^(v1|v2)$")):
     if os.environ.get("LLM_ENABLED") == "false":
         return TriageResponse(
             category="other",
@@ -28,7 +37,12 @@ async def triage(request: TriageRequest):
             reason="service disabled"
         )
 
-    system_prompt = load_prompt()
+    cache_key = get_cache_key(request.text, prompt_version)
+
+    if cache_key in cache:
+        return cache[cache_key]
+
+    system_prompt = load_prompt(prompt_version)
     client = get_client()
     model = get_model()
 
@@ -48,6 +62,9 @@ async def triage(request: TriageRequest):
     response, parse_error = parse_and_validate(result["content"], request.text)
 
     if response is not None:
+        if len(cache) >= CACHE_MAX_SIZE:
+            cache.pop(next(iter(cache)))
+        cache[cache_key] = response
         return response
 
     repair_result, repair_error = call_with_retry(
@@ -61,7 +78,7 @@ async def triage(request: TriageRequest):
     )
 
     if repair_error:
-        log_quarantine(result["content"], parse_error or "Unknown error", "v1", request.text)
+        log_quarantine(result["content"], parse_error or "Unknown error", prompt_version, request.text)
         raise HTTPException(status_code=422, detail=f"Model output invalid: {parse_error}")
 
     log_call(model, repair_result["input_tokens"], repair_result["output_tokens"], repair_result["duration_ms"], True)
@@ -69,7 +86,10 @@ async def triage(request: TriageRequest):
     response, repair_parse_error = parse_and_validate(repair_result["content"], request.text)
 
     if response is not None:
+        if len(cache) >= CACHE_MAX_SIZE:
+            cache.pop(next(iter(cache)))
+        cache[cache_key] = response
         return response
 
-    log_quarantine(repair_result["content"], repair_parse_error or "Unknown error", "v1", request.text)
+    log_quarantine(repair_result["content"], repair_parse_error or "Unknown error", prompt_version, request.text)
     raise HTTPException(status_code=422, detail=f"Model output invalid: {repair_parse_error}")
